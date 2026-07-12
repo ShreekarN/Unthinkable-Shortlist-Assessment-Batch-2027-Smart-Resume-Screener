@@ -8,7 +8,7 @@ from app import db
 from app.config import staticDir
 from app.routes import router
 
-app = FastAPI(title="Smart Resume Screener", version="1.0.0")
+app = FastAPI(title="Smart Resume Screener", version="1.1.0")
 
 
 @app.on_event("startup")
@@ -22,5 +22,9 @@ app.mount("/static", StaticFiles(directory=staticDir), name="static")
 
 @app.get("/")
 def home():
-    indexPath = Path(staticDir) / "index.html"
-    return FileResponse(indexPath)
+    return FileResponse(Path(staticDir) / "index.html")
+
+
+@app.get("/login")
+def loginPage():
+    return FileResponse(Path(staticDir) / "login.html")

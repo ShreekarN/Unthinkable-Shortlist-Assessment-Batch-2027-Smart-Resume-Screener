@@ -6,16 +6,22 @@ from groq import Groq
 from app.config import groqApiKey, groqModel
 
 extractSystemPrompt = (
-    "You extract resume data. Return strict JSON only with keys: "
-    "name (string), skills (array of strings), experience (array of strings), "
-    "education (array of strings). No markdown."
+    "You are a resume parsing specialist for technical hiring workflows. "
+    "Read the resume text and extract only factual information present in the document. "
+    "Return strict JSON with keys: name (string), skills (array of strings), "
+    "experience (array of concise role or project strings), "
+    "education (array of concise education strings). "
+    "Do not invent details. Do not use markdown. Return JSON only."
 )
 
 matchSystemPrompt = (
-    "Compare the following resume with this job description and rate fit on "
-    "1-10 with justification. Return strict JSON only with keys: "
-    "score (number 1-10), justification (string), strengths (array of strings), "
-    "gaps (array of strings). No markdown."
+    "You are a technical recruiter evaluating candidate fit for a specific role. "
+    "Compare the parsed resume data against the job description and produce a fair, "
+    "evidence-based assessment. Score fit from 1 to 10 where 10 is an excellent match. "
+    "Return strict JSON with keys: score (number 1-10), justification (string with 3-5 "
+    "complete sentences explaining the score), strengths (array of role-relevant strengths), "
+    "gaps (array of missing or weak areas). Base conclusions only on provided data. "
+    "Do not use markdown. Return JSON only."
 )
 
 
@@ -52,6 +58,7 @@ def callGroq(systemPrompt, userPrompt):
 
 
 def callGroqJson(systemPrompt, userPrompt):
+    # Retry once because models can occasionally return non-JSON text.
     lastError = None
     for attempt in range(2):
         try:
@@ -63,7 +70,10 @@ def callGroqJson(systemPrompt, userPrompt):
 
 
 def extractResume(resumeText):
-    userPrompt = f"Resume text:\n{resumeText}"
+    userPrompt = (
+        "Extract structured resume fields from the text below.\n\n"
+        f"Resume text:\n{resumeText}"
+    )
     data = callGroqJson(extractSystemPrompt, userPrompt)
     return {
         "name": str(data.get("name", "Unknown")),
@@ -76,6 +86,7 @@ def extractResume(resumeText):
 def matchResume(parsedResume, jobDescription):
     resumeJson = json.dumps(parsedResume, indent=2)
     userPrompt = (
+        "Evaluate candidate fit using the job description and parsed resume below.\n\n"
         f"Job description:\n{jobDescription}\n\n"
         f"Parsed resume:\n{resumeJson}"
     )

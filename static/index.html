@@ -7,46 +7,88 @@
   <link rel="stylesheet" href="/static/style.css">
 </head>
 <body>
-  <div class="wrap">
-    <header>
-      <h1>Smart Resume Screener</h1>
-      <p>Upload resumes, match against a job description, and view shortlisted candidates.</p>
+  <div class="app-shell">
+    <header class="topbar">
+      <button id="menuBtn" class="icon-btn" type="button" aria-label="Open menu">☰</button>
+      <div>
+        <h1>Smart Resume Screener</h1>
+        <p id="userEmail" class="subtle"></p>
+      </div>
+      <button id="logoutBtn" class="ghost-btn" type="button">Logout</button>
     </header>
 
-    <section class="card">
-      <h2>Job Description</h2>
-      <label for="jobTitle">Title</label>
-      <input id="jobTitle" type="text" placeholder="e.g. Backend Developer">
+    <aside id="sideNav" class="side-nav">
+      <button class="nav-link active" data-tab="uploadTab" type="button">Upload and Score</button>
+      <button class="nav-link" data-tab="parsedTab" type="button">Parsed Resumes</button>
+    </aside>
 
-      <label for="jobDescription">Description</label>
-      <textarea id="jobDescription" rows="8" placeholder="Paste the full job description here..."></textarea>
+    <main class="main-content">
+      <section id="uploadTab" class="tab-panel active">
+        <div class="card">
+          <h2>Job Setup</h2>
 
-      <button id="createJobBtn" type="button">Create Job</button>
-      <p id="jobStatus" class="status"></p>
-    </section>
+          <label for="jobRole">Target Role</label>
+          <select id="jobRole"></select>
 
-    <section class="card">
-      <h2>Upload Resumes</h2>
-      <p class="hint">Supports PDF and TXT. Upload one or more files after creating a job.</p>
-      <input id="resumeFiles" type="file" accept=".pdf,.txt" multiple>
-      <button id="uploadBtn" type="button" disabled>Upload and Score</button>
-      <p id="uploadStatus" class="status"></p>
-    </section>
+          <div id="customTitleWrap" class="hidden">
+            <label for="customJobTitle">Custom Job Title</label>
+            <input id="customJobTitle" type="text" placeholder="Enter job title">
+          </div>
 
-    <section class="card">
-      <div class="row">
-        <h2>Shortlisted Candidates</h2>
-        <button id="refreshBtn" type="button" disabled>Refresh</button>
-      </div>
-      <p class="hint">Candidates with score 7 or higher appear here.</p>
-      <div id="shortlistTable"></div>
-    </section>
+          <fieldset class="jd-mode">
+            <legend>Job Description Source</legend>
+            <label class="inline-label">
+              <input type="radio" name="jdMode" value="default" checked>
+              Use default description
+            </label>
+            <label class="inline-label">
+              <input type="radio" name="jdMode" value="custom">
+              Enter your own description
+            </label>
+          </fieldset>
 
-    <section id="detailPanel" class="card hidden">
-      <h2>Candidate Detail</h2>
-      <div id="detailContent"></div>
-      <button id="closeDetailBtn" type="button">Close</button>
-    </section>
+          <label for="jobDescription">Job Description</label>
+          <textarea id="jobDescription" rows="10"></textarea>
+
+          <button id="createJobBtn" type="button">Create Job</button>
+          <p id="jobStatus" class="status"></p>
+        </div>
+
+        <div class="card">
+          <h2>Upload Resumes</h2>
+          <p class="hint">Supports PDF and TXT. Upload one or more files after creating a job.</p>
+          <input id="resumeFiles" type="file" accept=".pdf,.txt" multiple>
+          <button id="uploadBtn" type="button" disabled>Upload and Score</button>
+          <p id="uploadStatus" class="status"></p>
+        </div>
+
+        <div class="card">
+          <div class="row">
+            <h2>Shortlisted Candidates</h2>
+            <button id="refreshBtn" type="button" disabled>Refresh</button>
+          </div>
+          <p class="hint">Candidates with score 7 or higher appear here.</p>
+          <div id="shortlistTable"></div>
+        </div>
+      </section>
+
+      <section id="parsedTab" class="tab-panel">
+        <div class="card">
+          <div class="row">
+            <h2>Parsed Resumes</h2>
+            <button id="refreshParsedBtn" type="button" disabled>Refresh</button>
+          </div>
+          <p class="hint">All parsed resumes stored in SQLite for the active job.</p>
+          <div id="parsedTable"></div>
+        </div>
+      </section>
+
+      <section id="detailPanel" class="card hidden">
+        <h2>Candidate Detail</h2>
+        <div id="detailContent"></div>
+        <button id="closeDetailBtn" type="button">Close</button>
+      </section>
+    </main>
   </div>
 
   <script src="/static/app.js"></script>

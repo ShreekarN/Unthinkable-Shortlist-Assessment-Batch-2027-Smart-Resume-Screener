@@ -4,6 +4,7 @@ import pdfplumber
 
 
 def extractText(fileName, fileBytes):
+    # Route file parsing by extension so upload API stays simple.
     lowerName = fileName.lower()
     if lowerName.endswith(".pdf"):
         return extractPdf(fileBytes)
@@ -13,6 +14,7 @@ def extractText(fileName, fileBytes):
 
 
 def extractPdf(fileBytes):
+    # Join all non-empty pages because resumes often span multiple pages.
     textParts = []
     with pdfplumber.open(io.BytesIO(fileBytes)) as pdf:
         for page in pdf.pages:

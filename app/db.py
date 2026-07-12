@@ -1,8 +1,12 @@
+import hashlib
 import json
 import sqlite3
 from datetime import datetime, timezone
 
 from app.config import dbPath
+
+defaultEmail = "abc@gmail.com"
+defaultPassword = "abc123"
 
 
 def getConn():
@@ -12,8 +16,29 @@ def getConn():
 
 
 def initDb():
+    # Create all tables and seed demo login user on first startup.
     conn = getConn()
     cur = conn.cursor()
+    cur.execute(
+        """
+        CREATE TABLE IF NOT EXISTS users (
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            email TEXT NOT NULL UNIQUE,
+            passwordHash TEXT NOT NULL,
+            createdAt TEXT NOT NULL
+        )
+        """
+    )
+    cur.execute(
+        """
+        CREATE TABLE IF NOT EXISTS sessions (
+            token TEXT PRIMARY KEY,
+            userId INTEGER NOT NULL,
+            expiresAt TEXT NOT NULL,
+            FOREIGN KEY (userId) REFERENCES users(id)
+        )
+        """
+    )
     cur.execute(
         """
         CREATE TABLE IF NOT EXISTS jobs (
@@ -40,11 +65,77 @@ def initDb():
         """
     )
     conn.commit()
+    seedDefaultUser(cur)
+    conn.commit()
     conn.close()
+
+
+def seedDefaultUser(cur):
+    cur.execute("SELECT id FROM users WHERE email = ?", (defaultEmail,))
+    if cur.fetchone():
+        return
+    createdAt = nowIso()
+    passwordHash = hashlib.sha256(defaultPassword.encode("utf-8")).hexdigest()
+    cur.execute(
+        "INSERT INTO users (email, passwordHash, createdAt) VALUES (?, ?, ?)",
+        (defaultEmail, passwordHash, createdAt),
+    )
 
 
 def nowIso():
     return datetime.now(timezone.utc).isoformat()
+
+
+def getUserByEmail(email):
+    conn = getConn()
+    cur = conn.cursor()
+    cur.execute("SELECT * FROM users WHERE email = ?", (email.lower().strip(),))
+    row = cur.fetchone()
+    conn.close()
+    if not row:
+        return None
+    return dict(row)
+
+
+def getUserById(userId):
+    conn = getConn()
+    cur = conn.cursor()
+    cur.execute("SELECT id, email, createdAt FROM users WHERE id = ?", (userId,))
+    row = cur.fetchone()
+    conn.close()
+    if not row:
+        return None
+    return dict(row)
+
+
+def createSession(token, userId, expiresAt):
+    conn = getConn()
+    cur = conn.cursor()
+    cur.execute(
+        "INSERT INTO sessions (token, userId, expiresAt) VALUES (?, ?, ?)",
+        (token, userId, expiresAt),
+    )
+    conn.commit()
+    conn.close()
+
+
+def getSession(token):
+    conn = getConn()
+    cur = conn.cursor()
+    cur.execute("SELECT * FROM sessions WHERE token = ?", (token,))
+    row = cur.fetchone()
+    conn.close()
+    if not row:
+        return None
+    return dict(row)
+
+
+def deleteSession(token):
+    conn = getConn()
+    cur = conn.cursor()
+    cur.execute("DELETE FROM sessions WHERE token = ?", (token,))
+    conn.commit()
+    conn.close()
 
 
 def createJob(title, description):
@@ -112,6 +203,23 @@ def getShortlist(jobId, minScore):
         ORDER BY score DESC, id DESC
         """,
         (jobId, minScore),
+    )
+    rows = [dict(row) for row in cur.fetchall()]
+    conn.close()
+    return rows
+
+
+def getAllCandidates(jobId):
+    # Return every parsed resume for Parsed Resumes tab, not only shortlist.
+    conn = getConn()
+    cur = conn.cursor()
+    cur.execute(
+        """
+        SELECT * FROM candidates
+        WHERE jobId = ?
+        ORDER BY score DESC, id DESC
+        """,
+        (jobId,),
     )
     rows = [dict(row) for row in cur.fetchall()]
     conn.close()

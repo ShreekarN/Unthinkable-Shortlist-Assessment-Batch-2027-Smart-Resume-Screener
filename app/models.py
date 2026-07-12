@@ -1,6 +1,24 @@
-from typing import Optional
-
 from pydantic import BaseModel, Field
+
+
+class LoginRequest(BaseModel):
+    email: str = Field(min_length=3)
+    password: str = Field(min_length=3)
+
+
+class UserOut(BaseModel):
+    id: int
+    email: str
+
+
+class JobRoleOut(BaseModel):
+    key: str
+    label: str
+
+
+class JobTemplateOut(BaseModel):
+    title: str
+    description: str
 
 
 class JobCreate(BaseModel):
@@ -37,6 +55,19 @@ class ShortlistItem(BaseModel):
     score: float
     justification: str
     strengths: list[str]
+
+
+class ParsedResumeItem(BaseModel):
+    id: int
+    name: str
+    fileName: str
+    score: float
+    justification: str
+    skills: list[str]
+    experience: list[str]
+    education: list[str]
+    shortlisted: bool
+    createdAt: str
 
 
 class UploadResult(BaseModel):
