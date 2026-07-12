@@ -1,0 +1,54 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Smart Resume Screener</title>
+  <link rel="stylesheet" href="/static/style.css">
+</head>
+<body>
+  <div class="wrap">
+    <header>
+      <h1>Smart Resume Screener</h1>
+      <p>Upload resumes, match against a job description, and view shortlisted candidates.</p>
+    </header>
+
+    <section class="card">
+      <h2>Job Description</h2>
+      <label for="jobTitle">Title</label>
+      <input id="jobTitle" type="text" placeholder="e.g. Backend Developer">
+
+      <label for="jobDescription">Description</label>
+      <textarea id="jobDescription" rows="8" placeholder="Paste the full job description here..."></textarea>
+
+      <button id="createJobBtn" type="button">Create Job</button>
+      <p id="jobStatus" class="status"></p>
+    </section>
+
+    <section class="card">
+      <h2>Upload Resumes</h2>
+      <p class="hint">Supports PDF and TXT. Upload one or more files after creating a job.</p>
+      <input id="resumeFiles" type="file" accept=".pdf,.txt" multiple>
+      <button id="uploadBtn" type="button" disabled>Upload and Score</button>
+      <p id="uploadStatus" class="status"></p>
+    </section>
+
+    <section class="card">
+      <div class="row">
+        <h2>Shortlisted Candidates</h2>
+        <button id="refreshBtn" type="button" disabled>Refresh</button>
+      </div>
+      <p class="hint">Candidates with score 7 or higher appear here.</p>
+      <div id="shortlistTable"></div>
+    </section>
+
+    <section id="detailPanel" class="card hidden">
+      <h2>Candidate Detail</h2>
+      <div id="detailContent"></div>
+      <button id="closeDetailBtn" type="button">Close</button>
+    </section>
+  </div>
+
+  <script src="/static/app.js"></script>
+</body>
+</html>
