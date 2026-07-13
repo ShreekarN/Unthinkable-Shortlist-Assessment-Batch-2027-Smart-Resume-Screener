@@ -254,30 +254,7 @@ pytest -v tests/test_acceptance.py
 
 ## Screenshots
 
-Demo screenshots live in `screenshots/` (regenerated for the current UI):
-
-| File | What it shows |
-|------|----------------|
-| `01-login-page.png` | Login screen |
-| `02-login-filled.png` | Credentials entered |
-| `03-dashboard-upload-tab.png` | Upload and Score dashboard |
-| `04-menu-drawer-open.png` | Menu drawer with Upload / Parsed views |
-| `05-default-jd-and-threshold.png` | Default JD + shortlist threshold |
-| `06-job-created.png` | Job created confirmation |
-| `07-resumes-selected.png` | Resumes selected for upload |
-| `08-upload-results.png` | Upload and score results |
-| `09-shortlist-view.png` | Shortlisted candidates |
-| `10-parsed-resumes-tab.png` | Parsed Resumes table |
-| `11-highlighted-parsed-text.png` | Highlighted extracted resume text |
-| `12-candidate-detail-page.png` | Dedicated candidate detail page |
-
-To regenerate (app must be running on port 8001):
-
-```bash
-pip install -r requirements-dev.txt
-playwright install chromium
-python scripts/capture_screenshots.py
-```
+Demo screenshots are in the `screenshots/` folder.
 
 ## Demo Video
 
@@ -306,8 +283,6 @@ smart-resume-screener/
     highlight.js
     login.js
     style.css
-  scripts/
-    capture_screenshots.py
   screenshots/
   demo/
   tests/
