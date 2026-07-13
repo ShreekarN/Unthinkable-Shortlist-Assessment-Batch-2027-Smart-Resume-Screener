@@ -4,25 +4,33 @@ Intelligently parse resumes, extract skills, and match candidates against job de
 
 ## Features
 
-- Login-protected dashboard (SQLite auth)
+- Login-protected dashboard with SQLite users and session cookies
+- Guest users are redirected to login; logged-in users skip the login page
 - Preset job roles with default descriptions (Core Skills, Keywords, Impact Metrics)
-- Custom role and custom job description support
-- Upload PDF or TXT resumes
-- Extract structured data: skills, experience, education
-- Compute a 1-10 match score with justification
-- Store parsed resumes in SQLite
-- Hamburger/side navigation with two views:
+- Custom role title and custom job description support
+- User-defined shortlist threshold per job (1–10, default 7)
+- Upload PDF or TXT resumes (multi-file)
+- Dual PDF engines (PyMuPDF + pdfplumber) with `normalizeText()` and quality-based selection
+- Groq extract step: name, skills, experience, education
+- Groq match step: score (1–10), justification, strengths, gaps, evidence phrases
+- Highlight extracted resume text by evidence, strengths, gaps, and skills
+- Store assessments in SQLite (`rawText`, `parsedJson`, score, justification)
+- Menu button opens a side drawer with two views:
   - Upload and Score
-  - Parsed Resumes (all stored candidates for active job)
-- Expandable justification text in tables and detail view
+  - Parsed Resumes
+- Expandable justification text in tables and detail views
+- Expandable highlighted parsed text (**Text** action / detail panels)
+- Dedicated candidate page (`/candidate`) opens in a new tab
+- Archive resume file content while keeping assessment data
+- Logout clears the session cookie
 
 ## Tech Stack
 
-- Python + FastAPI
+- Python + FastAPI (`version 1.1.0`)
 - SQLite (users, sessions, jobs, candidates)
 - Groq API (`llama-3.3-70b-versatile`)
-- pdfplumber for PDF text extraction
-- Static HTML/CSS/JS dashboard
+- PyMuPDF + pdfplumber for PDF text extraction
+- Static HTML/CSS/JS dashboard (`highlight.js` for resume marking)
 
 ## Architecture
 
@@ -30,39 +38,75 @@ Intelligently parse resumes, extract skills, and match candidates against job de
 flowchart LR
     subgraph ui [Dashboard]
         Login[LoginPage]
+        Menu[MenuDrawer]
         Upload[UploadAndScore]
         Parsed[ParsedResumesTab]
+        DetailInline[InlineDetailPanel]
+        DetailPage[CandidatePage]
+        Highlight[TextHighlighter]
     end
 
     subgraph api [FastAPI]
-        Auth[AuthRoutes]
+        Auth[AuthAndRedirects]
         Routes[APIRoutes]
-        Parser[ResumeParser]
-        Llm[GroqClient]
+        Parser[ResumeParserAndNormalize]
+        Llm[GroqExtractAndMatch]
         Store[SQLiteStore]
+        Archive[ArchiveRawText]
     end
 
     Login --> Auth
+    Auth --> Menu
+    Menu --> Upload
+    Menu --> Parsed
     Upload --> Routes
     Parsed --> Routes
     Routes --> Parser
     Parser --> Llm
     Llm --> Store
+    Store --> Upload
     Store --> Parsed
+    Parsed --> Highlight
+    Parsed --> DetailPage
+    Upload --> DetailInline
+    DetailPage --> Archive
+    Parsed --> Archive
 ```
 
 ### Flow
 
-1. User logs in with SQLite-backed session cookie
-2. User selects a target role or enters a custom role
-3. User chooses default JD or enters a custom JD
-4. User uploads one or more resumes
-5. Backend extracts text from PDF/TXT
-6. Groq extracts structured resume data
-7. Groq scores the candidate against the job description
-8. Results are saved in SQLite (`rawText`, `parsedJson`, score, justification)
-9. Upload tab shows shortlist (score >= 7)
-10. Parsed Resumes tab shows all stored parsed resumes for the active job
+1. User opens `/` or `/candidate` → redirected to `/login` if no valid session cookie
+2. User logs in; session is stored in SQLite and set as an HTTP-only cookie
+3. Dashboard UI stays hidden until `/api/auth/me` succeeds (prevents guest flash)
+4. User selects a target role or enters a custom role (**Other**)
+5. User chooses default JD or enters a custom JD, and sets shortlist threshold (1–10)
+6. User creates the job → stored with `minScore`
+7. User uploads one or more PDF/TXT resumes
+8. Backend extracts and normalizes text (see PDF strategy below)
+9. Groq **extract** returns structured resume fields from the normalized text
+10. Groq **match** scores fit against the JD using structured data **and** original resume text (up to 8000 chars), returning justification, strengths, gaps, and `evidencePhrases`
+11. Results are saved in SQLite (`rawText`, `parsedJson` including match payload, score, justification)
+12. Upload tab shows the shortlist for scores at or above that job’s `minScore`
+13. Parsed Resumes shows every stored candidate; **Text** opens highlighted extracted content; **Open** opens `/candidate?id=…`
+14. Archive clears `rawText` but keeps score and parsed assessment fields
+
+### PDF Parsing Strategy
+
+`app/parser.py` always tries both extractors for PDFs, normalizes each result, then picks the better one:
+
+1. **PyMuPDF** (`fitz`) text extract
+2. **pdfplumber** text extract
+3. **`normalizeText()`** on both outputs — ligatures, smart quotes/dashes, mojibake, hyphenated line breaks, split emails/URLs, whitespace cleanup
+4. **`textQualityScore()`** chooses the winner (length + contact-info bonus; penalty for broken split headers such as `P\nANKAJ`)
+5. TXT uploads are decoded as UTF-8 and passed through the same normalizer
+
+### Auth redirects
+
+| Route | Unauthenticated | Authenticated |
+|-------|------------------|---------------|
+| `/` | redirect → `/login` | dashboard |
+| `/candidate` | redirect → `/login` | candidate page |
+| `/login` | login form | redirect → `/` |
 
 ## Default Login
 
@@ -119,13 +163,16 @@ Open `http://127.0.0.1:8001/login`
 | GET | `/api/auth/me` | Current user |
 | GET | `/api/job-roles` | Preset role dropdown options |
 | GET | `/api/job-templates/{roleKey}` | Default JD for role |
-| POST | `/api/jobs` | Save job description |
+| POST | `/api/jobs` | Save job description + minScore |
 | POST | `/api/resumes` | Upload PDF/txt, parse, score |
-| GET | `/api/jobs/{jobId}/shortlist` | Ranked shortlisted candidates |
+| GET | `/api/jobs/{jobId}/shortlist` | Candidates at or above job threshold |
 | GET | `/api/jobs/{jobId}/parsed` | All parsed resumes for job |
-| GET | `/api/candidates/{id}` | Full parsed data + justification |
+| GET | `/api/candidates/{id}` | Full assessment, evidencePhrases, rawText |
+| POST | `/api/candidates/{id}/archive` | Clear stored file content, keep assessment |
 
 ## LLM Prompts
+
+Prompts live in `app/groqclient.py`. Calls use `temperature=0.2`, retry once if JSON parsing fails, and clamp score to 1–10.
 
 ### Extract prompt (system)
 
@@ -156,21 +203,39 @@ evidence-based assessment. Score fit from 1 to 10 where 10 is an excellent match
 Return strict JSON with keys: score (number 1-10),
 justification (string with 3-5 complete sentences explaining the score),
 strengths (array of role-relevant strengths),
-gaps (array of missing or weak areas).
+gaps (array of missing or weak areas),
+evidencePhrases (array of 3-8 short phrases copied from the resume wording
+that most directly support the score).
+Use exact resume phrasing in evidencePhrases when possible.
 Base conclusions only on provided data. Do not use markdown. Return JSON only.
 ```
 
 ### Match prompt (user)
 
 ```text
-Evaluate candidate fit using the job description and parsed resume below.
+Evaluate candidate fit using the job description, original resume text,
+and parsed resume below.
 
 Job description:
 <job description>
 
+Original resume text (quote evidencePhrases from this when possible):
+<normalized resume text, up to 8000 chars>
+
 Parsed resume:
 <structured resume JSON>
 ```
+
+## Highlighting (UI)
+
+`static/highlight.js` marks phrases in extracted resume text. When ranges overlap, higher priority wins:
+
+| Class | Source | Priority | Meaning |
+|-------|--------|----------|---------|
+| `hl-evidence` | `evidencePhrases` | 4 | Resume wording supporting the score |
+| `hl-strength` | `strengths` | 3 | Role-relevant strengths |
+| `hl-gap` | `gaps` | 2 | Missing or weak areas |
+| `hl-skill` | `skills` | 1 | Parsed skill keywords |
 
 ## Testing
 
@@ -179,34 +244,84 @@ pip install -r requirements-dev.txt
 pytest -v
 ```
 
+Useful filters:
+
+```bash
+pytest -v tests/test_unit_parser.py
+pytest -v tests/test_integration_api.py
+pytest -v tests/test_acceptance.py
+```
+
+## Screenshots
+
+Demo screenshots live in `screenshots/` (regenerated for the current UI):
+
+| File | What it shows |
+|------|----------------|
+| `01-login-page.png` | Login screen |
+| `02-login-filled.png` | Credentials entered |
+| `03-dashboard-upload-tab.png` | Upload and Score dashboard |
+| `04-menu-drawer-open.png` | Menu drawer with Upload / Parsed views |
+| `05-default-jd-and-threshold.png` | Default JD + shortlist threshold |
+| `06-job-created.png` | Job created confirmation |
+| `07-resumes-selected.png` | Resumes selected for upload |
+| `08-upload-results.png` | Upload and score results |
+| `09-shortlist-view.png` | Shortlisted candidates |
+| `10-parsed-resumes-tab.png` | Parsed Resumes table |
+| `11-highlighted-parsed-text.png` | Highlighted extracted resume text |
+| `12-candidate-detail-page.png` | Dedicated candidate detail page |
+
+To regenerate (app must be running on port 8001):
+
+```bash
+pip install -r requirements-dev.txt
+playwright install chromium
+python scripts/capture_screenshots.py
+```
+
+## Demo Video
+
+See `demo/Demo-video-Shreekar-Nyayapathi-Smart-Resume-Screener.mp4` for a walkthrough of the current UI and screening flow.
+
 ## Project Structure
 
 ```text
 smart-resume-screener/
   app/
-    main.py
+    main.py          # FastAPI app, auth redirects, static routes
     config.py
     db.py
     auth.py
     jobtemplates.py
-    parser.py
-    groqclient.py
+    parser.py        # PDF/TXT extract + normalize + quality pick
+    groqclient.py    # Extract + match prompts and Groq calls
     routes.py
     models.py
   static/
     index.html
     login.html
+    candidate.html
     app.js
+    candidate.js
+    highlight.js
     login.js
     style.css
+  scripts/
+    capture_screenshots.py
+  screenshots/
+  demo/
   tests/
   requirements.txt
+  requirements-dev.txt
+  pytest.ini
   .env.example
   README.md
 ```
 
 ## Notes
 
-- Shortlist threshold is score >= 7
+- Shortlist uses the threshold entered when creating each job (default 7)
 - Only PDF and TXT files are supported
+- Re-upload resumes after prompt/parser changes to refresh evidence phrases
+- Archived candidates keep scores and parsed fields but hide raw text in the UI
 - Do not commit `.env` or `resumes.db`

@@ -43,7 +43,7 @@ def testFullFlowWithRealPdfs(testDbPath, sampleJob, pdfFiles, hasGroqKey):
 
     shortlist = client.get(f"/api/jobs/{jobId}/shortlist").json()
     parsed = client.get(f"/api/jobs/{jobId}/parsed").json()
-    highScores = [item for item in uploaded if item["score"] >= 7]
+    highScores = [item for item in uploaded if item["score"] >= sampleJob["minScore"]]
     assert len(shortlist) == len(highScores)
     assert len(parsed) == len(uploaded)
 

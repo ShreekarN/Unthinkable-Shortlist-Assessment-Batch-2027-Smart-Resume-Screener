@@ -22,6 +22,17 @@ def testUnsupportedFileRaises():
         parser.extractText("resume.docx", b"data")
 
 
+def testNormalizeTextFixesHyphenLineBreak():
+    raw = "Python develop-\nment with FastAPI"
+    normalized = parser.normalizeText(raw)
+    assert "development" in normalized
+
+
+def testNormalizeTextFixesSmartQuotes():
+    normalized = parser.normalizeText("Candidate\u2019s profile")
+    assert "Candidate's profile" in normalized
+
+
 def testExtractPdfFromRealFiles():
     pdfPath = pdfDir / "N.pdf"
     if not pdfPath.exists():

@@ -65,9 +65,29 @@ def initDb():
         """
     )
     conn.commit()
+    ensureCandidateColumns(cur)
+    ensureJobColumns(cur)
     seedDefaultUser(cur)
     conn.commit()
     conn.close()
+
+
+def ensureCandidateColumns(cur):
+    # Add archive columns for databases created before this feature existed.
+    cur.execute("PRAGMA table_info(candidates)")
+    columns = {row[1] for row in cur.fetchall()}
+    if "archived" not in columns:
+        cur.execute("ALTER TABLE candidates ADD COLUMN archived INTEGER NOT NULL DEFAULT 0")
+    if "archivedAt" not in columns:
+        cur.execute("ALTER TABLE candidates ADD COLUMN archivedAt TEXT")
+
+
+def ensureJobColumns(cur):
+    # Add per-job shortlist threshold for databases created before this feature.
+    cur.execute("PRAGMA table_info(jobs)")
+    columns = {row[1] for row in cur.fetchall()}
+    if "minScore" not in columns:
+        cur.execute("ALTER TABLE jobs ADD COLUMN minScore REAL NOT NULL DEFAULT 7")
 
 
 def seedDefaultUser(cur):
@@ -138,18 +158,24 @@ def deleteSession(token):
     conn.close()
 
 
-def createJob(title, description):
+def createJob(title, description, minScore):
     conn = getConn()
     cur = conn.cursor()
     createdAt = nowIso()
     cur.execute(
-        "INSERT INTO jobs (title, description, createdAt) VALUES (?, ?, ?)",
-        (title, description, createdAt),
+        "INSERT INTO jobs (title, description, createdAt, minScore) VALUES (?, ?, ?, ?)",
+        (title, description, createdAt, minScore),
     )
     jobId = cur.lastrowid
     conn.commit()
     conn.close()
-    return {"id": jobId, "title": title, "description": description, "createdAt": createdAt}
+    return {
+        "id": jobId,
+        "title": title,
+        "description": description,
+        "createdAt": createdAt,
+        "minScore": minScore,
+    }
 
 
 def getJob(jobId):
@@ -224,3 +250,27 @@ def getAllCandidates(jobId):
     rows = [dict(row) for row in cur.fetchall()]
     conn.close()
     return rows
+
+
+def archiveCandidate(candidateId):
+    # Remove stored PDF or text content but keep parsed assessment data.
+    conn = getConn()
+    cur = conn.cursor()
+    cur.execute("SELECT id, archived FROM candidates WHERE id = ?", (candidateId,))
+    row = cur.fetchone()
+    if not row:
+        conn.close()
+        return None
+
+    archivedAt = nowIso()
+    cur.execute(
+        """
+        UPDATE candidates
+        SET rawText = '', archived = 1, archivedAt = ?
+        WHERE id = ?
+        """,
+        (archivedAt, candidateId),
+    )
+    conn.commit()
+    conn.close()
+    return {"id": candidateId, "archived": True, "archivedAt": archivedAt}

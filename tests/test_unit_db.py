@@ -2,7 +2,7 @@ from app import db
 
 
 def testCreateAndGetJob(testDbPath):
-    job = db.createJob("Engineer", "Build APIs with Python")
+    job = db.createJob("Engineer", "Build APIs with Python", 7)
     saved = db.getJob(job["id"])
     assert saved is not None
     assert saved["title"] == "Engineer"
@@ -10,7 +10,7 @@ def testCreateAndGetJob(testDbPath):
 
 
 def testCreateCandidateAndShortlist(testDbPath):
-    job = db.createJob("Engineer", "Python and SQL")
+    job = db.createJob("Engineer", "Python and SQL", 7)
     parsedData = {
         "name": "Jane Doe",
         "skills": ["Python"],

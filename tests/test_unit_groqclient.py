@@ -34,9 +34,32 @@ def testCallGroqJsonRetriesOnce(monkeypatch):
         calls["count"] += 1
         if calls["count"] == 1:
             return "bad json"
-        return '{"score": 7, "justification": "ok", "strengths": [], "gaps": []}'
+        return (
+            '{"score": 7, "justification": "ok", "strengths": [], '
+            '"gaps": [], "evidencePhrases": ["Python developer"]}'
+        )
 
     monkeypatch.setattr(groqclient, "callGroq", fakeCallGroq)
     data = groqclient.callGroqJson("system", "user")
     assert data["score"] == 7
     assert calls["count"] == 2
+
+
+def testMatchResumeReturnsEvidencePhrases(monkeypatch):
+    def fakeCallGroqJson(systemPrompt, userPrompt):
+        return {
+            "score": 8,
+            "justification": "Strong backend fit.",
+            "strengths": ["FastAPI"],
+            "gaps": ["Kubernetes"],
+            "evidencePhrases": ["Built REST APIs with FastAPI"],
+        }
+
+    monkeypatch.setattr(groqclient, "callGroqJson", fakeCallGroqJson)
+    result = groqclient.matchResume(
+        {"name": "Alex", "skills": ["Python"], "experience": [], "education": []},
+        "Backend role",
+        "Built REST APIs with FastAPI",
+    )
+    assert result["evidencePhrases"] == ["Built REST APIs with FastAPI"]
+    assert result["score"] == 8.0

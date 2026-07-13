@@ -5,6 +5,7 @@ from fastapi import APIRouter, Depends, File, Form, HTTPException, Request, Resp
 from app import auth, db, groqclient, jobtemplates, parser
 from app.config import shortlistMinScore
 from app.models import (
+    ArchiveResult,
     CandidateOut,
     JobCreate,
     JobOut,
@@ -17,12 +18,20 @@ from app.models import (
     UserOut,
 )
 
+# API surface for auth, job templates, upload→parse→match→store, shortlist, archive.
 router = APIRouter()
+
+
+def getJobMinScore(job):
+    # Use the threshold saved with each job, with config default for older rows.
+    return float(job.get("minScore") or shortlistMinScore)
 
 
 def buildCandidate(row):
     parsed = json.loads(row["parsedJson"])
     matchData = parsed.get("match", {})
+    rawText = row.get("rawText") or ""
+    archived = bool(row.get("archived", 0))
     return CandidateOut(
         id=row["id"],
         jobId=row["jobId"],
@@ -32,14 +41,18 @@ def buildCandidate(row):
         justification=row["justification"],
         strengths=matchData.get("strengths", []),
         gaps=matchData.get("gaps", []),
+        evidencePhrases=matchData.get("evidencePhrases", []),
         skills=parsed.get("skills", []),
         experience=parsed.get("experience", []),
         education=parsed.get("education", []),
         createdAt=row["createdAt"],
+        archived=archived,
+        hasRawText=bool(rawText.strip()),
+        rawText=rawText if rawText.strip() else "",
     )
 
 
-def buildParsedItem(row):
+def buildParsedItem(row, minScore):
     parsed = json.loads(row["parsedJson"])
     return ParsedResumeItem(
         id=row["id"],
@@ -50,7 +63,9 @@ def buildParsedItem(row):
         skills=parsed.get("skills", []),
         experience=parsed.get("experience", []),
         education=parsed.get("education", []),
-        shortlisted=row["score"] >= shortlistMinScore,
+        shortlisted=row["score"] >= minScore,
+        archived=bool(row.get("archived", 0)),
+        hasRawText=bool((row.get("rawText") or "").strip()),
         createdAt=row["createdAt"],
     )
 
@@ -100,7 +115,11 @@ def getJobTemplate(roleKey: str, user=Depends(auth.requireUser)):
 
 @router.post("/jobs", response_model=JobOut)
 def createJob(payload: JobCreate, user=Depends(auth.requireUser)):
-    job = db.createJob(payload.title.strip(), payload.description.strip())
+    job = db.createJob(
+        payload.title.strip(),
+        payload.description.strip(),
+        payload.minScore,
+    )
     return JobOut(**job)
 
 
@@ -110,6 +129,7 @@ async def uploadResume(
     file: UploadFile = File(...),
     user=Depends(auth.requireUser),
 ):
+    # Pipeline: extractText → extractResume → matchResume → SQLite candidate row.
     job = db.getJob(jobId)
     if not job:
         raise HTTPException(status_code=404, detail="Job not found")
@@ -122,7 +142,7 @@ async def uploadResume(
     try:
         rawText = parser.extractText(fileName, fileBytes)
         parsedResume = groqclient.extractResume(rawText)
-        matchData = groqclient.matchResume(parsedResume, job["description"])
+        matchData = groqclient.matchResume(parsedResume, job["description"], rawText)
     except ValueError as err:
         raise HTTPException(status_code=400, detail=str(err)) from err
 
@@ -133,8 +153,9 @@ async def uploadResume(
         jobId, fileName, rawText, parsedResume, score, justification
     )
 
-    shortlisted = score >= shortlistMinScore
-    message = "Added to shortlist" if shortlisted else "Processed but below shortlist threshold"
+    minScore = getJobMinScore(job)
+    shortlisted = score >= minScore
+    message = "Added to shortlist" if shortlisted else f"Processed but below threshold {minScore}"
 
     return UploadResult(
         id=candidateId,
@@ -151,7 +172,7 @@ def getShortlist(jobId: int, user=Depends(auth.requireUser)):
     if not job:
         raise HTTPException(status_code=404, detail="Job not found")
 
-    rows = db.getShortlist(jobId, shortlistMinScore)
+    rows = db.getShortlist(jobId, getJobMinScore(job))
     items = []
     for row in rows:
         parsed = json.loads(row["parsedJson"])
@@ -176,7 +197,8 @@ def getParsedResumes(jobId: int, user=Depends(auth.requireUser)):
         raise HTTPException(status_code=404, detail="Job not found")
 
     rows = db.getAllCandidates(jobId)
-    return [buildParsedItem(row) for row in rows]
+    minScore = getJobMinScore(job)
+    return [buildParsedItem(row, minScore) for row in rows]
 
 
 @router.get("/candidates/{candidateId}", response_model=CandidateOut)
@@ -185,3 +207,26 @@ def getCandidate(candidateId: int, user=Depends(auth.requireUser)):
     if not row:
         raise HTTPException(status_code=404, detail="Candidate not found")
     return buildCandidate(row)
+
+
+@router.post("/candidates/{candidateId}/archive", response_model=ArchiveResult)
+def archiveCandidate(candidateId: int, user=Depends(auth.requireUser)):
+    row = db.getCandidate(candidateId)
+    if not row:
+        raise HTTPException(status_code=404, detail="Candidate not found")
+
+    if bool(row.get("archived", 0)):
+        return ArchiveResult(
+            id=candidateId,
+            archived=True,
+            archivedAt=row.get("archivedAt") or "",
+            message="Resume file content already archived",
+        )
+
+    result = db.archiveCandidate(candidateId)
+    return ArchiveResult(
+        id=result["id"],
+        archived=True,
+        archivedAt=result["archivedAt"],
+        message="Resume file content archived. Assessment data kept.",
+    )

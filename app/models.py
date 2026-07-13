@@ -1,5 +1,7 @@
 from pydantic import BaseModel, Field
 
+# Response/request shapes for auth, jobs, candidates, archive, and shortlist.
+
 
 class LoginRequest(BaseModel):
     email: str = Field(min_length=3)
@@ -24,6 +26,7 @@ class JobTemplateOut(BaseModel):
 class JobCreate(BaseModel):
     title: str = Field(min_length=1)
     description: str = Field(min_length=1)
+    minScore: float = Field(default=7, ge=1, le=10)
 
 
 class JobOut(BaseModel):
@@ -31,9 +34,11 @@ class JobOut(BaseModel):
     title: str
     description: str
     createdAt: str
+    minScore: float
 
 
 class CandidateOut(BaseModel):
+    # Full assessment payload for detail panel and /candidate page.
     id: int
     jobId: int
     fileName: str
@@ -42,10 +47,21 @@ class CandidateOut(BaseModel):
     justification: str
     strengths: list[str]
     gaps: list[str]
+    evidencePhrases: list[str]
     skills: list[str]
     experience: list[str]
     education: list[str]
     createdAt: str
+    archived: bool = False
+    hasRawText: bool = True
+    rawText: str = ""
+
+
+class ArchiveResult(BaseModel):
+    id: int
+    archived: bool
+    archivedAt: str
+    message: str
 
 
 class ShortlistItem(BaseModel):
@@ -67,6 +83,8 @@ class ParsedResumeItem(BaseModel):
     experience: list[str]
     education: list[str]
     shortlisted: bool
+    archived: bool
+    hasRawText: bool
     createdAt: str
 
 

@@ -5,17 +5,26 @@
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
   <title>Smart Resume Screener</title>
   <link rel="stylesheet" href="/static/style.css">
+  <style>body.auth-pending .app-shell { visibility: hidden; }</style>
 </head>
-<body>
+<body class="auth-pending">
   <div class="app-shell">
     <header class="topbar">
-      <button id="menuBtn" class="icon-btn" type="button" aria-label="Open menu">☰</button>
+      <button id="menuBtn" class="icon-btn" type="button" aria-label="Open menu" aria-expanded="false" aria-controls="sideNav">
+        <span class="menu-bars" aria-hidden="true">
+          <span></span>
+          <span></span>
+          <span></span>
+        </span>
+      </button>
       <div>
         <h1>Smart Resume Screener</h1>
         <p id="userEmail" class="subtle"></p>
       </div>
       <button id="logoutBtn" class="ghost-btn" type="button">Logout</button>
     </header>
+
+    <div id="navBackdrop" class="nav-backdrop" hidden></div>
 
     <aside id="sideNav" class="side-nav">
       <button class="nav-link active" data-tab="uploadTab" type="button">Upload and Score</button>
@@ -50,6 +59,10 @@
           <label for="jobDescription">Job Description</label>
           <textarea id="jobDescription" rows="10"></textarea>
 
+          <label for="minScore">Shortlist Threshold (1-10)</label>
+          <input id="minScore" type="number" min="1" max="10" step="0.5" value="7">
+          <p class="hint">Candidates with score at or above this value are shortlisted.</p>
+
           <button id="createJobBtn" type="button">Create Job</button>
           <p id="jobStatus" class="status"></p>
         </div>
@@ -67,7 +80,7 @@
             <h2>Shortlisted Candidates</h2>
             <button id="refreshBtn" type="button" disabled>Refresh</button>
           </div>
-          <p class="hint">Candidates with score 7 or higher appear here.</p>
+          <p id="shortlistHint" class="hint">Candidates at or above the job threshold appear here.</p>
           <div id="shortlistTable"></div>
         </div>
       </section>
@@ -78,8 +91,18 @@
             <h2>Parsed Resumes</h2>
             <button id="refreshParsedBtn" type="button" disabled>Refresh</button>
           </div>
-          <p class="hint">All parsed resumes stored in SQLite for the active job.</p>
+          <p class="hint">All parsed resumes stored in SQLite for the active job. Click a row to open assessment in a new tab.</p>
           <div id="parsedTable"></div>
+        </div>
+
+        <div id="parsedTextPanel" class="card hidden">
+          <div class="row">
+            <h3>Extracted Resume Text</h3>
+            <button id="closeParsedTextBtn" class="ghost-btn" type="button">Close</button>
+          </div>
+          <div id="parsedTextLegend"></div>
+          <div id="parsedTextContent" class="parsed-text-box collapsed"></div>
+          <button id="parsedTextExpandBtn" class="expand-btn" type="button">Show more</button>
         </div>
       </section>
 
@@ -91,6 +114,7 @@
     </main>
   </div>
 
+  <script src="/static/highlight.js"></script>
   <script src="/static/app.js"></script>
 </body>
 </html>

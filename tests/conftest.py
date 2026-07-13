@@ -46,6 +46,7 @@ def sampleJob():
             "Keywords:\nresume parsing, LLM integration\n\n"
             "Impact Metrics:\nscoring accuracy, reduced screening time"
         ),
+        "minScore": 7,
     }
 
 

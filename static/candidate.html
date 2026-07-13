@@ -1,0 +1,22 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Candidate Detail | Smart Resume Screener</title>
+  <link rel="stylesheet" href="/static/style.css">
+  <style>body.auth-pending .candidate-page { visibility: hidden; }</style>
+</head>
+<body class="auth-pending">
+  <div class="wrap candidate-page">
+    <header class="candidate-header">
+      <h1>Candidate Assessment</h1>
+      <button id="archiveBtn" class="warn-btn" type="button">Archive</button>
+    </header>
+    <p id="archiveStatus" class="status"></p>
+    <div id="detailContent"></div>
+  </div>
+  <script src="/static/highlight.js"></script>
+  <script src="/static/candidate.js"></script>
+</body>
+</html>

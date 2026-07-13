@@ -1,14 +1,20 @@
 let currentJobId = null;
+let currentJobMinScore = 7;
 let jobRoles = [];
+
+// Dashboard: auth boot, menu drawer tabs, upload/score, parsed list, highlights, archive.
 
 const menuBtn = document.getElementById("menuBtn");
 const sideNav = document.getElementById("sideNav");
+const navBackdrop = document.getElementById("navBackdrop");
 const logoutBtn = document.getElementById("logoutBtn");
 const userEmail = document.getElementById("userEmail");
 const jobRole = document.getElementById("jobRole");
 const customTitleWrap = document.getElementById("customTitleWrap");
 const customJobTitle = document.getElementById("customJobTitle");
 const jobDescription = document.getElementById("jobDescription");
+const minScoreInput = document.getElementById("minScore");
+const shortlistHint = document.getElementById("shortlistHint");
 const createJobBtn = document.getElementById("createJobBtn");
 const jobStatus = document.getElementById("jobStatus");
 const resumeFiles = document.getElementById("resumeFiles");
@@ -18,17 +24,33 @@ const refreshBtn = document.getElementById("refreshBtn");
 const refreshParsedBtn = document.getElementById("refreshParsedBtn");
 const shortlistTable = document.getElementById("shortlistTable");
 const parsedTable = document.getElementById("parsedTable");
+const parsedTextPanel = document.getElementById("parsedTextPanel");
+const parsedTextLegend = document.getElementById("parsedTextLegend");
+const parsedTextContent = document.getElementById("parsedTextContent");
+const parsedTextExpandBtn = document.getElementById("parsedTextExpandBtn");
+const closeParsedTextBtn = document.getElementById("closeParsedTextBtn");
 const detailPanel = document.getElementById("detailPanel");
 const detailContent = document.getElementById("detailContent");
 const closeDetailBtn = document.getElementById("closeDetailBtn");
 
-menuBtn.addEventListener("click", () => sideNav.classList.toggle("open"));
+menuBtn.addEventListener("click", (event) => {
+  event.stopPropagation();
+  toggleSideNav();
+});
+navBackdrop.addEventListener("click", closeSideNav);
+document.addEventListener("keydown", (event) => {
+  if (event.key === "Escape") {
+    closeSideNav();
+  }
+});
 logoutBtn.addEventListener("click", logout);
 createJobBtn.addEventListener("click", createJob);
 uploadBtn.addEventListener("click", uploadResumes);
 refreshBtn.addEventListener("click", loadShortlist);
 refreshParsedBtn.addEventListener("click", loadParsedResumes);
 closeDetailBtn.addEventListener("click", closeDetail);
+closeParsedTextBtn.addEventListener("click", closeParsedText);
+parsedTextExpandBtn.addEventListener("click", toggleParsedTextExpand);
 jobRole.addEventListener("change", onRoleChange);
 
 document.querySelectorAll('input[name="jdMode"]').forEach((input) => {
@@ -49,6 +71,7 @@ async function boot() {
   }
 
   userEmail.textContent = me.email;
+  document.body.classList.remove("auth-pending");
   await loadJobRoles();
   onRoleChange();
   onJdModeChange();
@@ -75,6 +98,28 @@ async function loadJobRoles() {
     .join("");
 }
 
+function toggleSideNav() {
+  if (sideNav.classList.contains("open")) {
+    closeSideNav();
+  } else {
+    openSideNav();
+  }
+}
+
+function openSideNav() {
+  sideNav.classList.add("open");
+  navBackdrop.hidden = false;
+  menuBtn.setAttribute("aria-expanded", "true");
+  menuBtn.setAttribute("aria-label", "Close menu");
+}
+
+function closeSideNav() {
+  sideNav.classList.remove("open");
+  navBackdrop.hidden = true;
+  menuBtn.setAttribute("aria-expanded", "false");
+  menuBtn.setAttribute("aria-label", "Open menu");
+}
+
 function switchTab(tabId) {
   document.querySelectorAll(".tab-panel").forEach((panel) => {
     panel.classList.toggle("active", panel.id === tabId);
@@ -82,7 +127,7 @@ function switchTab(tabId) {
   document.querySelectorAll(".nav-link").forEach((link) => {
     link.classList.toggle("active", link.dataset.tab === tabId);
   });
-  sideNav.classList.remove("open");
+  closeSideNav();
 
   if (tabId === "parsedTab") {
     loadParsedResumes();
@@ -138,9 +183,15 @@ function getJobTitleValue() {
 async function createJob() {
   const title = getJobTitleValue();
   const description = jobDescription.value.trim();
+  const minScore = Number(minScoreInput.value);
 
   if (!title || !description) {
     jobStatus.textContent = "Enter job title and description.";
+    return;
+  }
+
+  if (Number.isNaN(minScore) || minScore < 1 || minScore > 10) {
+    jobStatus.textContent = "Threshold must be between 1 and 10.";
     return;
   }
 
@@ -151,7 +202,7 @@ async function createJob() {
     const response = await apiGet("/api/jobs", {
       method: "POST",
       headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ title, description }),
+      body: JSON.stringify({ title, description, minScore }),
     });
 
     if (!response.ok) {
@@ -160,10 +211,12 @@ async function createJob() {
 
     const data = await response.json();
     currentJobId = data.id;
+    currentJobMinScore = data.minScore;
+    updateShortlistHint();
     uploadBtn.disabled = false;
     refreshBtn.disabled = false;
     refreshParsedBtn.disabled = false;
-    jobStatus.textContent = `Job created with ID ${currentJobId}.`;
+    jobStatus.textContent = `Job created with ID ${currentJobId}. Threshold: ${currentJobMinScore}.`;
     await loadShortlist();
     await loadParsedResumes();
   } catch (error) {
@@ -171,6 +224,10 @@ async function createJob() {
   } finally {
     createJobBtn.disabled = false;
   }
+}
+
+function updateShortlistHint() {
+  shortlistHint.textContent = `Candidates with score ${currentJobMinScore} or higher appear here.`;
 }
 
 async function uploadResumes() {
@@ -309,18 +366,30 @@ function renderParsedTable(items) {
   const rows = items
     .map((item) => {
       const skillPreview = (item.skills || []).slice(0, 4).join(", ");
-      const badge = item.shortlisted
+      let badge = item.shortlisted
         ? '<span class="badge yes">Shortlisted</span>'
-        : '<span class="badge no">Below 7</span>';
+        : `<span class="badge no">Below ${currentJobMinScore}</span>`;
+      if (item.archived) {
+        badge += ' <span class="badge archived">Archived</span>';
+      }
 
       return `
-        <tr class="clickable" data-id="${item.id}">
+        <tr data-id="${item.id}">
           <td>${escapeHtml(item.name)}</td>
           <td>${escapeHtml(item.fileName)}</td>
           <td class="score">${item.score}</td>
           <td>${badge}</td>
           <td>${escapeHtml(skillPreview)}</td>
           <td>${renderJustificationCell(item.justification, `parsed-${item.id}`)}</td>
+          <td>
+            <button class="open-btn" data-open-id="${item.id}" type="button">Open</button>
+            <button class="text-btn" data-text-id="${item.id}" type="button" ${
+        item.hasRawText ? "" : "disabled"
+      }>Text</button>
+            <button class="action-btn" data-archive-id="${item.id}" type="button" ${item.archived ? "disabled" : ""}>
+              ${item.archived ? "Archived" : "Archive"}
+            </button>
+          </td>
         </tr>
       `;
     })
@@ -336,13 +405,58 @@ function renderParsedTable(items) {
           <th>Status</th>
           <th>Skills</th>
           <th>Justification</th>
+          <th>Actions</th>
         </tr>
       </thead>
       <tbody>${rows}</tbody>
     </table>
   `;
-  bindRowClicks(parsedTable);
+  bindParsedActions(parsedTable);
   bindExpandButtons(parsedTable);
+}
+
+function bindParsedActions(container) {
+  container.querySelectorAll("[data-open-id]").forEach((button) => {
+    button.addEventListener("click", (event) => {
+      event.stopPropagation();
+      const candidateId = button.getAttribute("data-open-id");
+      window.open(`/candidate?id=${candidateId}`, "_blank");
+    });
+  });
+
+  container.querySelectorAll("[data-text-id]").forEach((button) => {
+    button.addEventListener("click", async (event) => {
+      event.stopPropagation();
+      const candidateId = button.getAttribute("data-text-id");
+      await showParsedText(candidateId);
+    });
+  });
+
+  container.querySelectorAll("[data-archive-id]").forEach((button) => {
+    button.addEventListener("click", async (event) => {
+      event.stopPropagation();
+      const candidateId = button.getAttribute("data-archive-id");
+      if (!confirm("Archive file content for this resume? Assessment will be kept.")) {
+        return;
+      }
+
+      button.disabled = true;
+      try {
+        const response = await apiGet(`/api/candidates/${candidateId}/archive`, {
+          method: "POST",
+        });
+        const data = await response.json();
+        if (!response.ok) {
+          throw new Error(data.detail || "Archive failed");
+        }
+        await loadParsedResumes();
+        await loadShortlist();
+      } catch (error) {
+        alert(error.message);
+        button.disabled = false;
+      }
+    });
+  });
 }
 
 function renderJustificationCell(text, key) {
@@ -379,6 +493,49 @@ function bindRowClicks(container) {
   });
 }
 
+async function showParsedText(candidateId) {
+  try {
+    const response = await apiGet(`/api/candidates/${candidateId}`);
+    if (!response.ok) {
+      throw new Error("Failed to load parsed text");
+    }
+
+    const data = await response.json();
+    parsedTextLegend.innerHTML = renderHighlightLegend();
+    if (!data.hasRawText) {
+      parsedTextContent.innerHTML = '<span class="empty">File content archived. Assessment data kept.</span>';
+      parsedTextExpandBtn.classList.add("hidden");
+    } else {
+      parsedTextContent.innerHTML = highlightResumeText(
+        data.rawText,
+        data.evidencePhrases,
+        data.strengths,
+        data.gaps,
+        data.skills
+      );
+      parsedTextExpandBtn.classList.remove("hidden");
+      parsedTextContent.classList.add("collapsed");
+      parsedTextExpandBtn.textContent = "Show more";
+    }
+
+    parsedTextPanel.classList.remove("hidden");
+    parsedTextPanel.scrollIntoView({ behavior: "smooth" });
+  } catch (error) {
+    alert(error.message);
+  }
+}
+
+function toggleParsedTextExpand() {
+  const collapsed = parsedTextContent.classList.toggle("collapsed");
+  parsedTextExpandBtn.textContent = collapsed ? "Show more" : "Show less";
+}
+
+function closeParsedText() {
+  parsedTextPanel.classList.add("hidden");
+  parsedTextContent.innerHTML = "";
+  parsedTextLegend.innerHTML = "";
+}
+
 async function loadCandidateDetail(candidateId) {
   try {
     const response = await apiGet(`/api/candidates/${candidateId}`);
@@ -392,11 +549,16 @@ async function loadCandidateDetail(candidateId) {
         <h3>${escapeHtml(data.name)}</h3>
         <p><strong>Score:</strong> <span class="score">${data.score}</span></p>
         <p><strong>File:</strong> ${escapeHtml(data.fileName)}</p>
+        <p><strong>Stored file content:</strong> ${data.hasRawText ? "Present" : "Archived"}</p>
       </div>
       <div class="detail-block">
         <h3>Justification</h3>
         <div id="detailJustification" class="justification-text collapsed">${escapeHtml(data.justification)}</div>
         <button id="detailExpandBtn" class="expand-btn" type="button">Show more</button>
+      </div>
+      <div class="detail-block">
+        <h3>Evidence Phrases</h3>
+        ${renderPills(data.evidencePhrases)}
       </div>
       <div class="detail-block">
         <h3>Strengths</h3>
@@ -405,6 +567,21 @@ async function loadCandidateDetail(candidateId) {
       <div class="detail-block">
         <h3>Gaps</h3>
         ${renderPills(data.gaps)}
+      </div>
+      <div class="detail-block">
+        <h3>Extracted Resume Text</h3>
+        ${renderHighlightLegend()}
+        ${
+          data.hasRawText
+            ? `<div id="detailParsedText" class="parsed-text-box collapsed">${highlightResumeText(
+                data.rawText,
+                data.evidencePhrases,
+                data.strengths,
+                data.gaps,
+                data.skills
+              )}</div><button id="detailTextExpandBtn" class="expand-btn" type="button">Show more</button>`
+            : '<p class="empty">File content archived. Assessment data kept.</p>'
+        }
       </div>
       <div class="detail-block">
         <h3>Skills</h3>
@@ -429,6 +606,15 @@ async function loadCandidateDetail(candidateId) {
       detailExpandBtn.addEventListener("click", () => {
         const collapsed = detailJustification.classList.toggle("collapsed");
         detailExpandBtn.textContent = collapsed ? "Show more" : "Show less";
+      });
+    }
+
+    const detailTextExpandBtn = document.getElementById("detailTextExpandBtn");
+    const detailParsedText = document.getElementById("detailParsedText");
+    if (detailTextExpandBtn && detailParsedText) {
+      detailTextExpandBtn.addEventListener("click", () => {
+        const collapsed = detailParsedText.classList.toggle("collapsed");
+        detailTextExpandBtn.textContent = collapsed ? "Show more" : "Show less";
       });
     }
 
